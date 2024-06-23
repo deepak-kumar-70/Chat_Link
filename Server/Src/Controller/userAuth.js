@@ -85,14 +85,29 @@ const getMyProfile = async (req, resp) => {
 const searchUser = async (req, resp) => {
   const { name } = req.query;
   try {
-    const searchQuery = {};
+    let data;
     if (name) {
-      searchQuery.name = new RegExp(name, "i");
+      const startsWithQuery = new RegExp(`^${name}`, "i");
+
+      const containsQuery = new RegExp(name, "i");
+
+      const startsWith = await userModel.find({ name: startsWithQuery });
+
+      const contains = await userModel.find({
+        name: containsQuery,
+        _id: { $nin: startsWith.map((user) => user._id) },
+      });
+
+      data = [...startsWith, ...contains];
+    } else {
+      data = await userModel.find();
     }
-    const data = await userModel.find(searchQuery);
+
     resp.send(data);
   } catch (error) {
     console.log(error);
+    resp.status(500).send("Internal Server Error");
   }
 };
+
 export { ResisterUser, LoginUser, getMyProfile, searchUser };

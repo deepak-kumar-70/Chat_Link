@@ -6,7 +6,9 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Server } from "socket.io";
 import { createServer } from "http";
+import mongoose from "mongoose";
 import chatModel from "./Src/Model/chatModel.js";
+
 dotenv.config({
   path: "./.env",
 });
@@ -37,46 +39,57 @@ const io = new Server(server, {
     origin: "http://localhost:5173",
   },
 });
+
 const userSocket = new Map();
 const socketUser = new Map();
+
 io.on("connection", (socket) => {
-  const clientsId = socket.id;
-
   console.log("A user connected", socket.id);
+
   socket.on("findUser", ({ senderId, receiverId }) => {
-    userSocket.set(senderId, socket.id);
-    socketUser.set(socket.id, senderId);
-    const recipientUser = userSocket.get(receiverId);
-    if (senderId && receiverId) {
-      io.to(recipientUser).emit("userStatus", { status: "Online" });
+    if (mongoose.Types.ObjectId.isValid(senderId) && mongoose.Types.ObjectId.isValid(receiverId)) {
+      userSocket.set(senderId, socket.id);
+      socketUser.set(socket.id, senderId);
+     
+      console.log(senderId, receiverId, "User status updated to online");
+    } else {
+      console.error('Invalid senderId or receiverId provided');
     }
-    userSocket.set(senderId, socket.id);
-    console.log(senderId, receiverId, "op");
   });
+  socket.on('userStatus',({senderId})=>{
+    const userStatus=userSocket.get(senderId)
+    console.log(userStatus,senderId,'oj')
+    if(userStatus){
+      io.to(userStatus).emit("userStatus", { status: "Online" ,senderId});
+    }else{
+      io.to(userStatus).emit("userStatus", { status: "Offline" });
+    }
+   
+  })
   socket.on("typing", ({ val, receiverId }) => {
-    const recipientUser = userSocket.get(receiverId);
-    if (!(val == null)) {
-      console.log(val, "val");
-      io.to(recipientUser).emit("typing", { status: "typing..." });
+    if (mongoose.Types.ObjectId.isValid(receiverId)) {
+      const recipientUser = userSocket.get(receiverId);
+      if (recipientUser && val !== null) {
+        io.to(recipientUser).emit("typing", { status: "typing..." });
+      }
+    } else {
+      console.error('Invalid receiverId provided');
     }
   });
+
   socket.on("send message", async ({ message, receiverId, senderId }) => {
+    if (!mongoose.Types.ObjectId.isValid(senderId) || !mongoose.Types.ObjectId.isValid(receiverId)) {
+      console.error('Invalid senderId or receiverId provided');
+      return;
+    }
+
     userSocket.set(senderId, socket.id);
-    const dbChat = {
-      senderId: senderId,
-      receiverId: receiverId,
-      message: message,
-    };
-
+    const dbChat = { senderId, receiverId, message };
     const recipientUser = userSocket.get(receiverId);
-    console.log(recipientUser, userSocket.size, "opd");
-    if (recipientUser) {
-      io.to(recipientUser).emit("send message", {
-        message,
-        senderId: senderId,
-      });
 
-      socket.emit("send message", { message, senderId:senderId,receiverId:receiverId });
+    if (recipientUser) {
+      io.to(recipientUser).emit("send message", { message, senderId });
+      socket.emit("send message", { message, senderId, receiverId });
     }
 
     try {
@@ -84,24 +97,20 @@ io.on("connection", (socket) => {
         await chatModel.create(dbChat);
       }
     } catch (error) {
-      console.log(error);
+      console.error('Error saving chat to database:', error);
     }
   });
 
   socket.on("disconnect", () => {
-  const offlineUser= socketUser.get(socket.id)
-   if(offlineUser){
-    io.emit("userStatus", { status: "Offline", userId: offlineUser });
-    userSocket.delete(offlineUser);
-    console.log(
-      `User with socket ID ${clientsId} removed from map`
-    );
-   }
-   
-    
+    const offlineUser = socketUser.get(socket.id);
+    if (offlineUser) {
+      io.emit("userStatus", { status: "Offline", userId: offlineUser });
+      userSocket.delete(offlineUser);
+      console.log(`User with socket ID ${socket.id} removed from map`);
+    }
   });
 });
 
 server.listen(port, () => {
-  console.log(`server is running on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
