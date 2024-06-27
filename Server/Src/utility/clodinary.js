@@ -9,7 +9,20 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
   });
-  
+  const uploadAttachment = (filePath) => {
+    return new Promise((resolve, reject) => {
+      cloudinary.uploader.upload(filePath, { resource_type: 'auto' }, (error, result) => {
+        if (error) {
+          console.error('Cloudinary upload error:', error);
+          reject(error);
+        } else {
+          // Clean up the local file after upload
+          fs.unlinkSync(filePath);
+          resolve(result);
+        }
+      });
+    });
+  };
 const uploadCloudnary=async(path)=>{
   try {
     let imagess=await cloudinary.uploader.upload(path,
@@ -23,4 +36,4 @@ const uploadCloudnary=async(path)=>{
 
   
 }
-export {uploadCloudnary}
+export {uploadCloudnary,uploadAttachment}

@@ -8,6 +8,7 @@ const chat=new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "userModel",
     },
+    
     attachment:{
         type:String,
         default:''
